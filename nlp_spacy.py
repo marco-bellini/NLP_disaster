@@ -211,4 +211,5 @@ def evaluate(tokenizer, textcat, texts, cats):
 
 
 if __name__ == "__main__":
+	# test
     plac.call(main)
