@@ -22,8 +22,12 @@ from sklearn.model_selection import learning_curve
 from scipy.stats import randint as sp_randint , uniform
 
 from scipy.stats import chi2_contingency
-
+from inspect import signature
 from sklearn.metrics import precision_recall_curve, roc_curve
+from sklearn.calibration import CalibratedClassifierCV, calibration_curve
+
+# importlib.reload(dfh)
+
 
 
 def na_columns_plot(df,figsize=(16,8)):
@@ -209,11 +213,12 @@ def find_n_clusters(df,ncl,verbose=False,**kwargs):
 
     return(np.array(dist),np.array(centers))
 
-def plot_pr_mat(df,y_test):
+def plot_pr_mat(df):
   
     for n in df.index:
   
         y_score=df.loc[n,'y_score']
+        y_test=df.loc[n,'y_test']
         name=df.loc[n,'model']
         average_precision = average_precision_score(y_test, y_score)
         precision, recall, _ = precision_recall_curve(y_test, y_score)
@@ -231,10 +236,12 @@ def plot_pr_mat(df,y_test):
     plt.title('2-class Precision-Recall curve')
     plt.legend()
     
-def plot_roc_mat(y_test,df):
+def plot_roc_mat(df):
 
     for n in df.index:
         y_score=df.loc[n,'y_score']
+        y_test=df.loc[n,'y_test']
+
         name=df.loc[n,'model'] 
 
         fpr, tpr, thresholds = roc_curve(y_test,  y_score)
@@ -250,15 +257,29 @@ def plot_roc_mat(y_test,df):
     plt.legend(loc="lower right");
     plt.axis('square');
 
-def add_metrics(y_test,y_score,y_pred,model,df=None):
+def add_metrics(y_test,y_score,y_pred,model,df=None,DOE=None):
     # records the scores in a DataFrame
-  
+    """
+
+    Example:
+    y_score = clf.predict_proba(X_test)[:,1]
+    y_pred = clf.predict(X_test)
+    rf=dfh.add_metrics(y_test,y_score,y_pred,'label')
+
+    DOE is an optional DOE vector
+    
+    """  
     average_precision = average_precision_score(y_test, y_score)
     cm=confusion_matrix(y_test, y_pred)
     tn, fp, fn, tp =cm.ravel()
 
-    df2=pd.DataFrame([[model,tn, fp, fn, tp,average_precision,y_score,y_pred,y_test]],
+    if DOE is None:
+        df2=pd.DataFrame([[model,tn, fp, fn, tp,average_precision,y_score,y_pred,y_test]],
                        columns=['model','tn', 'fp', 'fn', 'tp','AP','y_score','y_pred','y_test'])
+    else:
+        df2=pd.DataFrame([[model,tn, fp, fn, tp,average_precision,y_score,y_pred,y_test,DOE]],
+                       columns=['model','tn', 'fp', 'fn', 'tp','AP','y_score','y_pred','y_test','DOE'])
+        
     if df is None:
         df=df2
     else:
@@ -266,6 +287,17 @@ def add_metrics(y_test,y_score,y_pred,model,df=None):
     return(df)
 
 def print_cm(y_test, y_pred):
+    """
+
+    Example:
+    y_score = clf.predict_proba(X_test)[:,1]
+    y_pred = clf.predict(X_test)
+    rf=dfh.add_metrics(y_test,y_score,y_pred,'label')
+
+    
+    """
+    
+    
     print('Confusion Matrix')
     print('C true,predicted')
     print()
@@ -279,6 +311,7 @@ def print_cm(y_test, y_pred):
     print('false negatives : true 1, predicted 0: ',fn)
     print('true positives  : true 1, predicted 1: ',tp)
     
+
     
     
 def plot_learning_curve(estimator, title, X, y, ylim=None, cv=None,
@@ -386,3 +419,133 @@ def plot_feature_importance(X_train,clf,figsize=(16,4),n_features=30):
 
     feat.plot(kind='bar',figsize=figsize);
     plt.xlim(0,n_features);
+    
+def dict_clf_estimate(cl_dict,data_set):
+    """
+    loops over dictionary of classifiers / pipelines
+    
+    data_set: data_set['Xtrain'] data_set['Ytrain'] data_set['Xtest'] data_set['Ytest']
+    cl_dict= {label:clf}
+    
+    returns df add_metrics
+
+    """
+    
+    c=0
+    for  label,clf in cl_dict.items():
+        print(label)
+        
+        clf.fit(data_set['Xtrain'], data_set['Ytrain'])
+        y_score = clf.predict_proba(data_set['Xtest'] )[:,1]
+        y_pred = clf.predict(data_set['Xtest'])
+        Y_test=data_set['Ytest']
+
+        if c==0:
+            rf=add_metrics(Y_test,y_score,y_pred,label)
+        else:
+            rf=add_metrics(Y_test,y_score,y_pred,label,df=rf)        
+            
+        c+=1
+        
+    return(rf)
+
+def plot_cm_mat(df):
+
+    fig = plt.figure(1, figsize=(10, 10))
+    ax1=plt.subplot(2,2,1)
+    ax2=plt.subplot(2,2,2)
+    ax3=plt.subplot(2,2,3)
+    ax4=plt.subplot(2,2,4)
+    
+    
+    for n in df.index:
+  
+        y_score=df.loc[n,'y_score']
+        y_test=df.loc[n,'y_test']
+        name=df.loc[n,'model']
+
+        tn, fp, fn, tp,t=confusion_matrix_threshold(y_test,y_score,levels=200,normalize_class=False);
+
+        
+        ax1.plot(t,tn,'-',label=name);
+        ax1.set_ylabel('TN')
+        ax1.set_xlabel('threshold')
+
+        ax2.plot(t,tp,'-',label=name);
+        ax2.set_ylabel('TP')
+        ax2.set_xlabel('threshold')
+
+        ax3.plot(t,fn,'--',label=name);
+        ax3.set_ylabel('FN')
+        ax3.set_xlabel('threshold')
+
+        ax4.plot(t,fp,'--',label=name);
+        ax4.set_ylabel('FP')
+        ax4.set_xlabel('threshold')
+
+    plt.legend()
+        
+    return(ax1,ax2,ax3,ax4)
+
+
+def confusion_matrix_threshold(y_test,y_prob,levels=200,normalize_all=False,normalize_class=True):
+    
+    thresholds=np.linspace(0,1,levels)
+    tp=0*thresholds
+    tn=0*thresholds
+    fp=0*thresholds
+    fn=0*thresholds
+
+    n=0
+    for threshold in thresholds:
+        y_pred_threshold=y_prob > threshold 
+        tp[n]=np.sum( y_test & y_pred_threshold)
+        tn[n]=np.sum( ~y_test & ~y_pred_threshold)
+        fp[n]=np.sum( ~y_test & y_pred_threshold)
+        fn[n]=np.sum( y_test & ~y_pred_threshold)
+
+        n+=1
+        
+    if normalize_all:
+        n=y_test.shape[0]
+        return(tn/n, fp/n, fn/n, tp/n,thresholds )
+    elif normalize_class:
+        npos=np.sum(y_test)
+        nn=y_test.shape[0]-npos
+        
+        return(tn/nn, fp/nn, fn/npos, tp/npos,thresholds )
+    else:
+        return(tn, fp, fn, tp,thresholds )
+    
+def plot_prob_cal(df,bins=10):
+
+    fig = plt.figure(1, figsize=(10, 10))
+    ax1 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
+    ax2 = plt.subplot2grid((3, 1), (2, 0))
+
+    ax1.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
+
+    for n in df.index:
+
+        prob_pos=df.loc[n,'y_score']
+        name=df.loc[n,'model']
+        y_test=df.loc[n,'y_test']
+
+        prob_pos =   (prob_pos - prob_pos.min()) / (prob_pos.max() - prob_pos.min())
+        fraction_of_positives, mean_predicted_value = calibration_curve(y_test, prob_pos, n_bins=bins)
+        brier_score = brier_score_loss(y_test, prob_pos, pos_label=1)
+
+        ax1.plot(mean_predicted_value, fraction_of_positives, "s-",
+             label="%s  (%1.3f)" % (name,brier_score ))
+
+        ax2.hist(prob_pos, range=(0, 1), bins=bins, label=name,
+             histtype="step", lw=2)
+
+    ax1.set_ylabel("Fraction of positives")
+    ax1.set_ylim([-0.05, 1.05])
+    ax1.legend(loc="lower right")
+    ax1.set_title('Calibration plots  (reliability curve)')
+
+    ax2.set_xlabel("Mean predicted value")
+    ax2.set_ylabel("Count")
+    ax2.legend(loc="upper center", ncol=2)
