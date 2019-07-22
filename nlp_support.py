@@ -28,7 +28,7 @@ import importlib
 import pickle
 from sklearn.feature_selection import SelectKBest, chi2,  RFE, RFECV, SelectFpr
 
-
+from nltk.stem import WordNetLemmatizer
 
 from sklearn.base import TransformerMixin
 
@@ -57,6 +57,7 @@ from sklearn.metrics import confusion_matrix, fbeta_score, make_scorer, average_
 
 from scipy.stats import randint as sp_randint , uniform
 import eli5
+from joblib import dump, load
 
 
 def download_datafiles():
@@ -92,6 +93,24 @@ def explain_message(pos,fn_messages,pipe,dataset,top=10):
     display(eli5.show_prediction(pipe.steps[2][1],   dataset['Xtest'][pos,:] , target_names=[0,1],
                          feature_names= pipe.steps[0][1].get_feature_names(),top=top) )
     
+def spacy_tokenizer(message):
+    message=re.sub("[1-9#@$'!*+%\".()!,]?;",'',message).replace('','').replace('-','')
+    message=' '.join(message.split())
+    doc=nlp(message)
+    words=[]
+
+    
+    remove_ent=[]
+    for ent in doc.ents:
+        if ent.label_ in ['GPE','LOC','NORP','FAC','ORG','LANGUAGE']:
+            remove_ent.append(ent.text)
+
+    # remove punctuation etc
+    for token in doc:
+        if ( (~token.is_stop)   & (token.pos_!='NUM') & (token.pos_!='PUNCT') & (token.pos_!='SYM') &
+           ~(token.text in (remove_ent)) & (len(token.text)>1) ):
+            words.append( token.text )
+    return(words)
     
 def spacy_tokenizer_stemmer(message):
     message=re.sub("[1-9#@$'!*+%\".()!,]?;",'',message).replace('','').replace('-','')
@@ -112,6 +131,28 @@ def spacy_tokenizer_stemmer(message):
            ~(token.text in (remove_ent)) & (len(token.text)>1) ):
             words.append( stemmer.stem(token.text) )
     return(words)
+
+def spacy_tokenizer_lemmatizer(message,position="v"):
+    message=re.sub("[1-9#@$'!*+%\".()!,]?;",'',message).replace('','').replace('-','')
+    message=' '.join(message.split())
+    doc=nlp(message)
+    words=[]
+
+    wordnet_lemmatizer = WordNetLemmatizer()
+    
+    remove_ent=[]
+    for ent in doc.ents:
+        if ent.label_ in ['GPE','LOC','NORP','FAC','ORG','LANGUAGE']:
+            remove_ent.append(ent.text)
+
+    # remove punctuation etc
+    for token in doc:
+        if ( (~token.is_stop)   & (token.pos_!='NUM') & (token.pos_!='PUNCT') & (token.pos_!='SYM') &
+           ~(token.text in (remove_ent)) & (len(token.text)>1) ):
+#             words.append( stemmer.stem(token.text) )
+            words.append( wordnet_lemmatizer.lemmatize(token.text, pos=position)  )
+    return(words)
+
 
 
 
@@ -147,7 +188,7 @@ def imbalanced_undersample(X_train,Y_train,n_false_sample, classes=[False,True])
 
 
 
-def train_bow(X_train,Y_train, X_test,Y_test,n_false_sample ,  max_df=0.9,min_df=1, max_features=2000 ):
+def train_bow(X_train,Y_train, X_test,Y_test,n_false_sample ,  max_df=0.9,min_df=1, max_features=2000, tokenizer="stemmer" ):
     """
     transforms the training and test set with a reduced B.O.W. with only n_false_sample 
     usage:
@@ -158,7 +199,14 @@ def train_bow(X_train,Y_train, X_test,Y_test,n_false_sample ,  max_df=0.9,min_df
     
     X_train2,Y_train2=imbalanced_undersample(X_train,Y_train,n_false_sample, classes=[False,True])
 
-    bow_bal=CountVectorizer(tokenizer = spacy_tokenizer_stemmer, max_df=max_df,min_df=min_df, max_features=max_features)
+    if tokenizer=="stemmer":
+        tokenizer = spacy_tokenizer_stemmer
+    elif tokenizer=="lemmatizer":
+        tokenizer = spacy_tokenizer_lemmatizer
+    else:
+        tokenizer = spacy_tokenizer
+        
+    bow_bal=CountVectorizer(tokenizer = tokenizer, max_df=max_df,min_df=min_df, max_features=max_features)
     tfidf=TfidfTransformer()     
 
     bow_bal.fit(X_train2)
@@ -328,6 +376,27 @@ def load_data():
     X_valid=valid_df['message']
     Y_valid=valid_df['food']
     return(X_train,Y_train,X_test, Y_test,X_valid, Y_valid )
+
+def word_importance(bow_bal,fit_cl,pipe,rf):
+    """
+    plots word importance
+    
+    """
+    
+    words=np.array(bow_bal.get_feature_names())
+
+    # words selected
+    fs_sel=fit_cl[pipe].steps[0][1].get_support()
+    feature_names=words[fs_sel]
+
+    cl_weights=fit_cl[pipe].steps[1][1].feature_importances_
+    model_name=rf.loc[pipe,'model']
+    
+    feat=pd.DataFrame.from_dict(dict(zip(feature_names,cl_weights) ), orient='index',columns=[model_name])
+    feat=feat.sort_values(by=[model_name],ascending=False)
+
+    return(feat)
+
 
 
 

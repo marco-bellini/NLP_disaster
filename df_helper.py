@@ -432,6 +432,8 @@ def dict_clf_estimate(cl_dict,data_set):
     """
     
     c=0
+    fit_cl=[]
+    
     for  label,clf in cl_dict.items():
         print(label)
         
@@ -444,12 +446,12 @@ def dict_clf_estimate(cl_dict,data_set):
             rf=add_metrics(Y_test,y_score,y_pred,label)
         else:
             rf=add_metrics(Y_test,y_score,y_pred,label,df=rf)        
-            
+        fit_cl.append(clf)
         c+=1
         
-    return(rf)
+    return(rf,fit_cl)
 
-def plot_cm_mat(df):
+def plot_cm_mat(df,levels=200):
 
     fig = plt.figure(1, figsize=(10, 10))
     ax1=plt.subplot(2,2,1)
@@ -464,24 +466,24 @@ def plot_cm_mat(df):
         y_test=df.loc[n,'y_test']
         name=df.loc[n,'model']
 
-        tn, fp, fn, tp,t=confusion_matrix_threshold(y_test,y_score,levels=200,normalize_class=False);
+        tn, fp, fn, tp,t=confusion_matrix_threshold(y_test,y_score,levels=levels,normalize_class=False);
 
         
         ax1.plot(t,tn,'-',label=name);
         ax1.set_ylabel('TN')
         ax1.set_xlabel('threshold')
 
-        ax2.plot(t,tp,'-',label=name);
-        ax2.set_ylabel('TP')
-        ax2.set_xlabel('threshold')
+        ax4.plot(t,tp,'-',label=name);
+        ax4.set_ylabel('TP')
+        ax4.set_xlabel('threshold')
 
         ax3.plot(t,fn,'--',label=name);
         ax3.set_ylabel('FN')
         ax3.set_xlabel('threshold')
 
-        ax4.plot(t,fp,'--',label=name);
-        ax4.set_ylabel('FP')
-        ax4.set_xlabel('threshold')
+        ax2.plot(t,fp,'--',label=name);
+        ax2.set_ylabel('FP')
+        ax2.set_xlabel('threshold')
 
     plt.legend()
         
