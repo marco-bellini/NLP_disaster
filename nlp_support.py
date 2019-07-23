@@ -171,6 +171,10 @@ def imbalanced_undersample(X_train,Y_train,n_false_sample, classes=[False,True])
 
     print('Original n_true, n_false:' ,n_true,n_false)
     
+    if n_false_sample is None:
+        n_false_sample= ind_false.shape[0]
+        print("setting n_false_sample to: ", n_false_sample)
+    
     ind_s=sample_without_replacement(n_false,n_false_sample)
     ind=np.hstack((ind_true,ind_false[ind_s]))
     np.random.shuffle(ind)
@@ -203,9 +207,11 @@ def train_bow(X_train,Y_train, X_test,Y_test,n_false_sample ,  max_df=0.9,min_df
         tokenizer = spacy_tokenizer_stemmer
     elif tokenizer=="lemmatizer":
         tokenizer = spacy_tokenizer_lemmatizer
-    else:
+    elif tokenizer=="spacy_tokenizer":
         tokenizer = spacy_tokenizer
-        
+    else:
+        tokenizer = None
+    
     bow_bal=CountVectorizer(tokenizer = tokenizer, max_df=max_df,min_df=min_df, max_features=max_features)
     tfidf=TfidfTransformer()     
 
@@ -223,9 +229,10 @@ def train_bow(X_train,Y_train, X_test,Y_test,n_false_sample ,  max_df=0.9,min_df
 
 
 
-def clf_estimate(cl_dict,bow1k_bal,DOE):
+def clf_estimate(cl_dict,bow1k_bal):
     """
     cl_dict= {label:clf}
+    bow1k_bal is the dataset
 
     """
     

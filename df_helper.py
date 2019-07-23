@@ -229,8 +229,8 @@ def plot_pr_mat(df):
                        else {})
         plt.step(recall, precision,  alpha=0.5,
                  where='post', label ='{0:}  AP={1:0.2f}'.format(name,average_precision))
-    plt.xlabel('Recall')
-    plt.ylabel('Precision')
+    plt.xlabel('Recall = TP/CP = (TP/(TP+FN))')
+    plt.ylabel('Precision = TP/PP = (TP/(TP+FP))')
     plt.ylim([0.0, 1.05])
     plt.xlim([0.0, 1.0])
     plt.title('2-class Precision-Recall curve')
