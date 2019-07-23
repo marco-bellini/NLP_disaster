@@ -29,6 +29,22 @@ from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 # importlib.reload(dfh)
 
 
+def find_alpha_in_columns(X):
+    """
+        returns the non numeric elements in all the columns as a dict
+
+    """
+    
+    for col in X.columns: 
+
+        X_no_nan=X[col].dropna()
+        ind_non_num=pd.to_numeric(X_no_nan, errors='coerce').isnull()
+
+        X_alpha=X_no_nan.loc[ind_non_num]
+        if X_alpha.shape[0]>0:
+            col_alpha[col]=np.unique(X_alpha)
+    return(col_alpha)
+
 
 def na_columns_plot(df,figsize=(16,8)):
     # plots the percentage of na by columns 
